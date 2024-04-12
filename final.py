@@ -31,7 +31,7 @@ def load_products_from_excel(file_path):
 file_path = "teddy_sneaker_shop.xlsx"  # Убедитесь, что указываете правильный путь к файлу
 products = load_products_from_excel(file_path)
 
-TOKEN = '6789423516:AAHC13p6eIEIRc-gOW1-eTS7BJWI8fAWLH0'
+TOKEN = 'YOUR_TG_BOT_TOKEN'
 bot = telebot.TeleBot(TOKEN)
 
 
@@ -40,7 +40,7 @@ def to_markdown(text):
     return Markdown(textwrap.indent(text, '> ', predicate=lambda _: True))
 
 
-genai.configure(api_key='AIzaSyAog90B9hNgbhny1SKfRQI9JIkd5ZFmlRk')
+genai.configure(api_key='GEMINI_API_KEY')
 
 model = genai.GenerativeModel('gemini-pro')
 chat = model.start_chat(history=[])
