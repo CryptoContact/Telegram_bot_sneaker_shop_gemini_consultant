@@ -11,3 +11,7 @@ Interactive Cart Management: Users can view their shopping cart at any time, add
 Customer Support: Gemini AI powers the bot's customer support capabilities, enabling it to respond to user inquiries, provide product information, assist with order-related issues, and offer troubleshooting assistance in real-time.
 
 Integration with External Systems: The bot seamlessly integrates with external systems such as inventory management, CRM, and order fulfillment systems. This ensures accurate product availability information, streamlined order processing, and efficient inventory management.
+
+A system of discounts on promo codes has been implemented
+
+To launch the bot, run final.py
