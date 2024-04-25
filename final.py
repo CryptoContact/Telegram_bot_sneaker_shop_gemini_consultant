@@ -8,6 +8,10 @@ import time
 # Added import for handling Excel files directly
 import openpyxl
 import time
+import os
+from dotenv import load_dotenv
+import os
+from dotenv import load_dotenv
 
 # Словарь для хранения состояния выбора пользователя
 user_state = {}
@@ -27,13 +31,15 @@ def load_products_from_excel(file_path):
     # Конвертация DataFrame в список словарей
     return df.to_dict('records')
 
+# Load the environment variables from the .env file
+load_dotenv()
 
-# Замените 'path_to_your_excel_file.xlsx' на путь к вашему файлу
-file_path = "teddy_sneaker_shop.xlsx"  # Убедитесь, что указываете правильный путь к файлу
-products = load_products_from_excel(file_path)
+# Get the token from the environment variable
+TOKEN = os.getenv('TELEGRAM_TOKEN')
 
-TOKEN = '7085482762:AAFWMKDT2TEuMNygrbvh6VxYDINNX0eUsZs'
 bot = telebot.TeleBot(TOKEN)
+
+# Rest of the code remains unchanged
 
 
 def to_markdown(text):
@@ -41,7 +47,14 @@ def to_markdown(text):
     return Markdown(textwrap.indent(text, '> ', predicate=lambda _: True))
 
 
-genai.configure(api_key='AIzaSyALyhSAIo87JsCB31L-et6LhW2I8kRuLnQ')
+# Load the environment variables from the .env file
+load_dotenv()
+
+# Get the API key from the environment variable
+API_KEY = os.getenv('GENAI_API_KEY')
+
+# Configure the generative AI library with the API key
+genai.configure(api_key=API_KEY)
 
 model = genai.GenerativeModel('gemini-pro')
 chat = model.start_chat(history=[])
