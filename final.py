@@ -7,6 +7,7 @@ import pandas as pd
 import time
 # Added import for handling Excel files directly
 import openpyxl
+import time
 
 # Словарь для хранения состояния выбора пользователя
 user_state = {}
@@ -127,219 +128,125 @@ def show_cart_with_no_discounts(message):
         # Добавляем кнопку очистки Cart и покупки
         markup.add(types.InlineKeyboardButton("Clear Cart", callback_data='clear_cart'))
         markup.add(types.InlineKeyboardButton("Buy", callback_data='buy'))
+        # ...
 
-        bot.send_message(user_id, cart_text, reply_markup=markup)
-    else:
-        bot.send_message(user_id, "Your Cart пуста")
-
-# Handle the coupon callback
-@bot.callback_query_handler(func=lambda call: call.data == 'apply_coupon')
-def apply_coupon(call):
-    user_id = call.message.chat.id
-    msg = bot.send_message(user_id, "Введите купон")
-    bot.register_next_step_handler(msg, process_coupon_code)
-
-
-def process_coupon_code(message):
-    user_id = message.chat.id
-    coupon_code = message.text.upper()  # Convert coupon to uppercase
-
-    # Check coupon in the Excel file
-    df_coupons = pd.read_excel(file_path, sheet_name='Sheet1')  # Adjust the sheet name if needed
-    coupon_row = df_coupons.loc[df_coupons['coupon'] == coupon_code]
-
-    if not coupon_row.empty:
-        # Get the coupon name and discount percentage
-        coupon_name = coupon_row['coupon'].values[0]
-        discount_percentage = coupon_row['percentage'].values[0]
-        # Call apply_discount_to_cart function with coupon name and discount
-        apply_discount_to_cart(message, discount_percentage, coupon_name)
-    else:
-        bot.send_message(user_id, "Купон не найден")
+        def apply_discount_to_cart(message, discount, coupon_name):
+            user_id = message.chat.id
+            # Save the discount percentage and coupon name in user_discounts and user_discount_name dictionaries
+            user_discounts[user_id] = discount
+            user_discount_name[user_id] = coupon_name  # Save the coupon name
+            try:
+                if user_id in user_cart and user_cart[user_id]:
+                    total_price = 0
+                    cart_text = f"Скидка {int(discount)}% была применена с использованием купона '{coupon_name}'.\nContents вашей Cart:\n\n"
+                    for index, (name, size, _) in enumerate(user_cart[user_id], start=1):
+                        discounted_price = price - (price * discount / 100)
+                        cart_text += f"{index}. {name} - Размер: {size} - Цена: {discounted_price} тенге.\n"
+                        total_price += discounted_price
+                    cart_text += f"\nИтог со скидкой: {total_price} тенге."
+                    # Add clear cart button
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton("Очистить корзину", callback_data='clear_cart'))
+                    # Update the cart message
+                    bot.edit_message_text(chat_id=user_id, message_id=message.message_id, text=cart_text, reply_markup=markup)
+            except telebot.apihelper.ApiTelegramException as e:
+                if e.error_code == 400:
+                    # If the message cannot be edited, send a new message
+                    bot.send_message(user_id, cart_text, reply_markup=markup)
 
 
-def apply_discount_to_cart(message, discount, coupon_name):
-    user_id = message.chat.id
-    # Save the discount percentage and coupon name in user_discounts and user_discount_name dictionaries
-    user_discounts[user_id] = discount
-    user_discount_name[user_id] = coupon_name  # Save the coupon name
-    try:
-        if user_id in user_cart and user_cart[user_id]:
-            total_price = 0
-            cart_text = f"Скидка {int(discount)}% была применена с использованием купона '{coupon_name}'.\nContents вашей Cart:\n\n"
-            for index, (name, size, price) in enumerate(user_cart[user_id], start=1):
-                discounted_price = price - (price * discount / 100)
-                cart_text += f"{index}. {name} - Размер: {size} - Цена: {discounted_price} тенге.\n"
-                total_price += discounted_price
-            cart_text += f"\nИтог со скидкой: {total_price} тенге."
-            # Add clear cart button
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Очистить корзину", callback_data='clear_cart'))
-            # Update the cart message
-            bot.edit_message_text(chat_id=user_id, message_id=message.message_id, text=cart_text, reply_markup=markup)
-    except telebot.apihelper.ApiTelegramException as e:
-        if e.error_code == 400:
-            # If the message cannot be edited, send a new message
-            bot.send_message(user_id, cart_text, reply_markup=markup)
+        # Обработчик кнопки "Cart"
+        # Добавляем обработчик для кнопки "Очистить корзину"
+        # Existing clear_cart function
+        @bot.callback_query_handler(func=lambda call: call.data == 'clear_cart')
+        def clear_cart(call):
+            user_id = call.message.chat.id
+            if user_id in user_cart and user_cart[user_id]:
+                user_cart[user_id] = []
+                if user_id in user_discounts:  # Сбрасываем скидку для пользователя
+                    del user_discounts[user_id]
+            # Check if the cart for the user exists and has items
+            if user_id in user_cart and user_cart[user_id]:
+                # Clear the user's cart
+                user_cart[user_id] = []
+                # Inform the user that the cart has been cleared
+                bot.answer_callback_query(call.id, 'Your Cart has been cleared')
+                # Replace the existing message with "Your Cart пуста"
+                bot.edit_message_text(chat_id=call.message.chat.id,
+                                      message_id=call.message.message_id,
+                                      text="Your Cart пуста")
+            else:
+                # If the cart is already empty, just close the callback query popup
+                bot.answer_callback_query(call.id, 'Your Cart уже пуста')
 
 
-# Обработчик кнопки "Cart"
-# Добавляем обработчик для кнопки "Очистить корзину"
-# Existing clear_cart function
-@bot.callback_query_handler(func=lambda call: call.data == 'clear_cart')
-def clear_cart(call):
-    user_id = call.message.chat.id
-    if user_id in user_cart and user_cart[user_id]:
-        user_cart[user_id] = []
-        if user_id in user_discounts:  # Сбрасываем скидку для пользователя
-            del user_discounts[user_id]
-    # Check if the cart for the user exists and has items
-    if user_id in user_cart and user_cart[user_id]:
-        # Clear the user's cart
-        user_cart[user_id] = []
-        # Inform the user that the cart has been cleared
-        bot.answer_callback_query(call.id, 'Your Cart has been cleared')
-        # Replace the existing message with "Your Cart пуста"
-        bot.edit_message_text(chat_id=call.message.chat.id,
-                              message_id=call.message.message_id,
-                              text="Your Cart пуста")
-    else:
-        # If the cart is already empty, just close the callback query popup
-        bot.answer_callback_query(call.id, 'Your Cart уже пуста')
+        @bot.callback_query_handler(func=lambda call: call.data.startswith('remove_'))
+        def remove_from_cart(call):
+            item_index = int(call.data.split('_')[1]) - 1
+            user_id = call.message.chat.id
+
+            if user_id in user_cart and 0 <= item_index < len(user_cart[user_id]):
+                item_to_remove = user_cart[user_id].pop(item_index)
+                bot.answer_callback_query(call.id, f"{item_to_remove[0]} Size: {item_to_remove[1]} removed from Cart.")
+
+                # Удаляем старое сообщение с корзиной
+                bot.delete_message(user_id, call.message.message_id)
+
+                # Отправляем новое сообщение с обновленной корзиной
+                show_cart(call.message)
+            else:
+                bot.answer_callback_query(call.id, "Item to remove not found.")
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('remove_'))
-def remove_from_cart(call):
-    item_index = int(call.data.split('_')[1]) - 1
-    user_id = call.message.chat.id
-
-    if user_id in user_cart and 0 <= item_index < len(user_cart[user_id]):
-        item_to_remove = user_cart[user_id].pop(item_index)
-        bot.answer_callback_query(call.id, f"{item_to_remove[0]} Size: {item_to_remove[1]} removed from Cart.")
-
-        # Удаляем старое сообщение с корзиной
-        bot.delete_message(user_id, call.message.message_id)
-
-        # Отправляем новое сообщение с обновленной корзиной
-        show_cart(call.message)
-    else:
-        bot.answer_callback_query(call.id, "Item to remove not found.")
+        @bot.message_handler(func=lambda message: message.text == "✍️ Reviews")
+        def send_reviews(message):
+            # Ссылка на страницу с отзывами
+            reviews_link = 'https://t.me/tobedetermined'
+            # Отправляем сообщение с ссылкой
+            bot.send_message(message.chat.id, f"Heres some reviews: {reviews_link}")
 
 
-@bot.message_handler(func=lambda message: message.text == "✍️ Reviews")
-def send_reviews(message):
-    # Ссылка на страницу с отзывами
-    reviews_link = 'https://t.me/tobedetermined'
-    # Отправляем сообщение с ссылкой
-    bot.send_message(message.chat.id, f"Heres some reviews: {reviews_link}")
-
-def update_excel_files(user_phone, products_purchased, coupon_used=None):
-    # Загрузка рабочих книг и листов
-    user_crm_wb = openpyxl.load_workbook(user_crm_file_path)
-    teddy_sneaker_shop_wb = openpyxl.load_workbook(teddy_sneaker_shop_file_path)
-
-    # Загрузка активных листов
-    user_crm_ws = user_crm_wb.active
-    teddy_sneaker_shop_ws = teddy_sneaker_shop_wb.active
-
-    # Обновление данных CRM пользователя
-    phone_col_index = 1  # 'phone' предполагается быть в первой колонке
-    product_col_index = 2  # 'product' во второй колонке
-    coupon_col_index = 3  # 'coupon' в третьей колонке
-
-    # Преобразование списка купленных товаров в строку
-    products_string = ', '.join([f"{name} Размер: {size}" for name, size in products_purchased])
-
-    # Поиск строки для обновления на основе номера телефона
-    row_to_update_index = None
-    for index, row in enumerate(user_crm_ws.iter_rows(min_row=2, min_col=phone_col_index, max_col=phone_col_index, values_only=True), start=2):
-        if row[0] == user_phone:
-            row_to_update_index = index
-            break
-
-    if row_to_update_index:
-        # Обновляем данные в найденной строке
-        current_products = user_crm_ws.cell(row=row_to_update_index, column=product_col_index).value or ''
-        new_products = f"{current_products}, {products_string}" if current_products else products_string
-        user_crm_ws.cell(row=row_to_update_index, column=product_col_index).value = new_products
-
-        # Если был использован купон, обновляем ячейку купона для пользователя
-        if coupon_used:
-            current_coupons = user_crm_ws.cell(row=row_to_update_index, column=coupon_col_index).value or ''
-            new_coupons = f"{current_coupons}, {coupon_used}" if current_coupons else coupon_used
-            user_crm_ws.cell(row=row_to_update_index, column=coupon_col_index).value = new_coupons
-    else:
-        # Если запись пользователя не существует, добавляем новую запись
-        user_crm_ws.append([user_phone, products_string, coupon_used or ''])
-
-    # Обновление инвентаря teddy_sneaker_shop
-    for product_name, product_size in products_purchased:
-        for row in teddy_sneaker_shop_ws.iter_rows(min_row=2):
-            if row[0].value == product_name and str(row[1].value) == str(product_size):
-                row[4].value = (row[4].value or 0) - 1
-                break
-
-    # Сохранение рабочих книг
-    user_crm_wb.save(user_crm_file_path)
-    teddy_sneaker_shop_wb.save(teddy_sneaker_shop_file_path)
-    # Закрытие файлов после сохранения
-    user_crm_wb.close()
-    teddy_sneaker_shop_wb.close()
+        @bot.callback_query_handler(func=lambda call: call.data == 'buy')
+        def handle_buy_button(call):
+            msg = bot.send_message(call.message.chat.id, "Enter Your Username to purchase")
+            bot.register_next_step_handler(msg, process_phone_number)
 
 
-
-# Modify the callback for the "Купить" button
-@bot.callback_query_handler(func=lambda call: call.data == 'buy')
-def handle_buy_button(call):
-    msg = bot.send_message(call.message.chat.id, "Enter Your Username to purchase")
-    bot.register_next_step_handler(msg, process_phone_number)
-
-
-def coupon_already_used(user_phone, coupon_name):
-    user_crm_wb = openpyxl.load_workbook(user_crm_file_path)
-    user_crm_ws = user_crm_wb.active
-    for row in user_crm_ws.iter_rows(min_row=2, values_only=True):
-        phone, _, used_coupons = row[:3]
-        if str(phone) == str(user_phone):
-            if used_coupons:  # Check if used_coupons is not None
-                # Разделяем использованные купоны по запятой и проверяем каждый
-                for c in (c.strip() for c in used_coupons.split(',')):
-                    if coupon_name == c:
-                        return True
-    return False
+        def coupon_already_used(user_phone, coupon_name):
+            user_crm_wb = openpyxl.load_workbook(user_crm_file_path)
+            user_crm_ws = user_crm_wb.active
+            for row in user_crm_ws.iter_rows(min_row=2, values_only=True):
+                phone, _, used_coupons = row[:3]
+                if str(phone) == str(user_phone):
+                    if used_coupons:  # Check if used_coupons is not None
+                        # Разделяем использованные купоны по запятой и проверяем каждый
+                        for c in (c.strip() for c in used_coupons.split(',')):
+                            if coupon_name == c:
+                                return True
+            return False
 
 
-def process_phone_number(message):
-    user_phone = message.text.strip()
-    user_id = message.chat.id
+        def process_phone_number(message):
+            user_phone = message.text.strip()
+            user_id = message.chat.id
 
-    # Если имя купона есть в user_discount_name, но скидка уже использована, удаляем её
-    coupon_name = user_discount_name.get(user_id, '')
-    if coupon_name and coupon_already_used(user_phone, coupon_name):
-        bot.send_message(user_id, "Code is already redeemed")
-        user_discounts.pop(user_id, None)  # Удаляем скидку из словаря, если она есть
+            # Если имя купона есть в user_discount_name, но скидка уже использована, удаляем её
+            coupon_name = user_discount_name.get(user_id, '')
+            if coupon_name and coupon_already_used(user_phone, coupon_name):
+                bot.send_message(user_id, "Code is already redeemed")
+                user_discounts.pop(user_id, None)  # Удаляем скидку из словаря, если она есть
 
-    # Продолжаем процесс покупки в любом случае
-    bot.send_message(user_id, "Payment successful!")
-    products_purchased = [(name, size) for name, size, price in user_cart[user_id]]
+            # Продолжаем процесс покупки в любом случае
+            bot.send_message(user_id, "Payment successful!")
+            products_purchased = [(name, size) for name, size, _ in user_cart[user_id]]
 
-    # Если купон был использован, не передаем его в update_excel_files
-    coupon_for_excel = coupon_name if user_discounts.get(user_id) is not None else None
-    update_excel_files(user_phone, products_purchased, coupon_for_excel)
+            # Если купон был использован, не передаем его в update_excel_files
+            coupon_for_excel = coupon_name if user_discounts.get(user_id) is not None else None
+            update_excel_files(user_phone, products_purchased, coupon_for_excel)
 
-    user_cart[user_id] = []  # Очищаем корзину после покупки
-    bot.send_message(user_id, "Thank you for your purchase!")
+            user_cart[user_id] = []  # Очищаем корзину после покупки
+            bot.send_message(user_id, "Thank you for your purchase!")
 
-
-
-
-
-
-# Функция для вывода Shopа
-@bot.message_handler(func=lambda message: message.text == "👟 Shop")
-def catalog(message):
-    markup = types.InlineKeyboardMarkup()
-    # Уникальные модели обуви
     unique_models = set(product['name'] for product in products)
     for model_name in unique_models:
         markup.add(types.InlineKeyboardButton(model_name, callback_data='model_' + model_name))
